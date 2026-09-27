@@ -7,21 +7,29 @@
 )]
 #![deny(clippy::large_stack_frames)]
 
+use core::cell::{Cell, RefCell};
+
+use critical_section::Mutex;
 use defmt::info;
 use embedded_graphics::Drawable;
 use embedded_graphics::draw_target::DrawTarget;
 use embedded_graphics::pixelcolor::{Rgb565, RgbColor};
 use embedded_hal_bus::spi::ExclusiveDevice;
 use esp_backtrace as _;
+use esp_hal::analog::adc::{Adc, AdcCalBasic, AdcConfig, Attenuation};
 use esp_hal::clock::CpuClock;
+use esp_hal::gpio::{Input, InputConfig, Io, Pull};
 use esp_hal::{delay, gpio, main, spi, time};
 use esp_println as _;
-use game::Game;
+use game::logic::{Cmd, Game, GameState, PlayerResult};
 use st7735_lcd::{Orientation, ST7735};
 
 // This creates a default app-descriptor required by the esp-idf bootloader.
 // For more information see: <https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/app_image_format.html#application-description>
 esp_bootloader_esp_idf::esp_app_desc!();
+
+static SEL_PIN: Mutex<RefCell<Option<Input>>> = Mutex::new(RefCell::new(None));
+static IS_PIN_PRESS: Mutex<Cell<bool>> = Mutex::new(Cell::new(false));
 
 #[allow(
     clippy::large_stack_frames,
@@ -70,10 +78,127 @@ fn main() -> ! {
 
     info!("Display setup finished!");
 
-    let game = Game::new();
-    game.draw(&mut disp).unwrap();
+    // Joystick's axes
+    let mut adc_config = AdcConfig::new();
+    let mut adc_pin_x_axis =
+        adc_config.enable_pin_with_cal::<_, AdcCalBasic<_>>(peripherals.GPIO9, Attenuation::_11dB);
+    let mut adc_pin_y_axis =
+        adc_config.enable_pin_with_cal::<_, AdcCalBasic<_>>(peripherals.GPIO10, Attenuation::_11dB);
+    let mut adc = Adc::new(peripherals.ADC1, adc_config);
 
-    loop {}
+    // Joystick's button
+    let mut io = Io::new(peripherals.IO_MUX);
+    io.set_interrupt_handler(handler);
+
+    let mut sel_pin = Input::new(
+        peripherals.GPIO11,
+        InputConfig::default().with_pull(Pull::Up),
+    );
+
+    critical_section::with(|cs| {
+        // Enter critical section before listen to
+        // an event to prevent an interrupt firing
+        // before the select pin has been set up
+        sel_pin.listen(gpio::Event::FallingEdge);
+        SEL_PIN.borrow_ref_mut(cs).replace(sel_pin);
+    });
+
+    let mut game = Game::new();
+    let mut pre_x_axis_state = AxisState::Med;
+    let mut pre_y_axis_state = AxisState::Med;
+
+    loop {
+        use game::logic::Direction;
+
+        const LOW_LIMIT: u16 = 500;
+        const HI_LIMIT: u16 = 2500;
+
+        let mut select = None;
+        critical_section::with(|cs| {
+            if IS_PIN_PRESS.borrow(cs).get() {
+                select = Some(Cmd::Select);
+                delay.delay_millis(200);
+
+                let mut sel_pin = SEL_PIN.borrow_ref_mut(cs).take().unwrap();
+                sel_pin.listen(gpio::Event::FallingEdge);
+                SEL_PIN.borrow_ref_mut(cs).replace(sel_pin);
+
+                IS_PIN_PRESS.borrow(cs).replace(false);
+            }
+        });
+        match select {
+            Some(select) => {
+                if let GameState::Menu | GameState::Result = game.get_state() {
+                    disp.clear(Rgb565::BLACK).unwrap();
+                }
+                game.handle_input(select);
+            }
+            None => {}
+        }
+
+        let x_adc_val = adc.read_blocking(&mut adc_pin_x_axis);
+        let cur_x_axis_state = if x_adc_val > HI_LIMIT {
+            AxisState::Hi
+        } else if x_adc_val < LOW_LIMIT {
+            AxisState::Low
+        } else {
+            AxisState::Med
+        };
+        if cur_x_axis_state != pre_x_axis_state {
+            match cur_x_axis_state {
+                AxisState::Hi => game.handle_input(Cmd::Move(Direction::Right)),
+                AxisState::Low => game.handle_input(Cmd::Move(Direction::Left)),
+                AxisState::Med => {}
+            }
+        };
+        pre_x_axis_state = cur_x_axis_state;
+
+        let y_adc_val = adc.read_blocking(&mut adc_pin_y_axis);
+        let cur_y_axis_state = if y_adc_val > HI_LIMIT {
+            AxisState::Hi
+        } else if y_adc_val < LOW_LIMIT {
+            AxisState::Low
+        } else {
+            AxisState::Med
+        };
+        if cur_y_axis_state != pre_y_axis_state {
+            match cur_y_axis_state {
+                AxisState::Hi => game.handle_input(Cmd::Move(Direction::Up)),
+                AxisState::Low => game.handle_input(Cmd::Move(Direction::Down)),
+                AxisState::Med => {}
+            }
+        }
+        pre_y_axis_state = cur_y_axis_state;
+
+        game.draw(&mut disp).unwrap();
+
+        delay.delay_millis(10);
+    }
 
     // for inspiration have a look at the examples at https://github.com/esp-rs/esp-hal/tree/esp-hal-v1.0.0/examples
+}
+
+#[derive(PartialEq, Eq, Debug)]
+enum AxisState {
+    Low,
+    Med,
+    Hi,
+}
+
+#[esp_hal::handler]
+fn handler() {
+    critical_section::with(|cs| {
+        let mut sel_pin = SEL_PIN.borrow_ref_mut(cs);
+        let Some(sel_pin) = sel_pin.as_mut() else {
+            // Some other interrupt has occured
+            // before the select pin was set up.
+            return;
+        };
+
+        if sel_pin.is_interrupt_set() {
+            IS_PIN_PRESS.borrow(cs).set(true);
+            sel_pin.clear_interrupt();
+            sel_pin.unlisten();
+        }
+    })
 }
