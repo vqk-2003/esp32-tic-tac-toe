@@ -21,7 +21,7 @@ use esp_hal::clock::CpuClock;
 use esp_hal::gpio::{Input, InputConfig, Io, Pull};
 use esp_hal::{delay, gpio, main, spi, time};
 use esp_println as _;
-use game::logic::{Cmd, Game, GameState};
+use game::logic::{Cmd, Game, GameState, PlayerResult};
 use st7735_lcd::{Orientation, ST7735};
 
 // This creates a default app-descriptor required by the esp-idf bootloader.
@@ -107,6 +107,9 @@ fn main() -> ! {
     let mut pre_x_axis_state = AxisState::Med;
     let mut pre_y_axis_state = AxisState::Med;
 
+    // Draw first frame
+    game.draw(&mut disp).unwrap();
+
     loop {
         use game::logic::Direction;
 
@@ -130,10 +133,21 @@ fn main() -> ! {
         });
         match select {
             Some(select) => {
-                if let GameState::Menu | GameState::Result = game.get_state() {
-                    disp.clear(Rgb565::BLACK).unwrap();
+                match game.get_state() {
+                    GameState::Menu | GameState::Result => disp.clear(Rgb565::BLACK).unwrap(),
+                    GameState::GamePlay => {}
                 }
                 game.handle_input(select);
+                if let GameState::GamePlay = game.get_state() {
+                    match game.check_player_one_result() {
+                        PlayerResult::Won | PlayerResult::Lost | PlayerResult::Drew => {
+                            disp.clear(Rgb565::BLACK).unwrap();
+                            game.show_result();
+                        }
+                        PlayerResult::OnGoing => {}
+                    }
+                }
+                game.draw(&mut disp).unwrap();
             }
             None => {}
         }
@@ -148,8 +162,15 @@ fn main() -> ! {
         };
         if cur_x_axis_state != pre_x_axis_state {
             match cur_x_axis_state {
-                AxisState::Hi => game.handle_input(Cmd::Move(Direction::Down)),
-                AxisState::Low => game.handle_input(Cmd::Move(Direction::Up)),
+                AxisState::Hi => {
+                    game.handle_input(Cmd::Move(Direction::Down));
+
+                    game.draw(&mut disp).unwrap();
+                }
+                AxisState::Low => {
+                    game.handle_input(Cmd::Move(Direction::Up));
+                    game.draw(&mut disp).unwrap();
+                }
                 AxisState::Med => {}
             }
         };
@@ -165,14 +186,18 @@ fn main() -> ! {
         };
         if cur_y_axis_state != pre_y_axis_state {
             match cur_y_axis_state {
-                AxisState::Hi => game.handle_input(Cmd::Move(Direction::Right)),
-                AxisState::Low => game.handle_input(Cmd::Move(Direction::Left)),
+                AxisState::Hi => {
+                    game.handle_input(Cmd::Move(Direction::Right));
+                    game.draw(&mut disp).unwrap();
+                }
+                AxisState::Low => {
+                    game.handle_input(Cmd::Move(Direction::Left));
+                    game.draw(&mut disp).unwrap();
+                }
                 AxisState::Med => {}
             }
         }
         pre_y_axis_state = cur_y_axis_state;
-
-        game.draw(&mut disp).unwrap();
 
         delay.delay_millis(10);
     }

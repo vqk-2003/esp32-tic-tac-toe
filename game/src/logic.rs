@@ -102,11 +102,11 @@ impl Game {
         }
     }
 
-    fn get_cell_state(&mut self, row: usize, col: usize) -> CellState {
+    fn get_cell_state(&self, row: usize, col: usize) -> CellState {
         self.board[row * BOARD_COL + col]
     }
 
-    pub fn check_player_one_result(&mut self) -> PlayerResult {
+    pub fn check_player_one_result(&self) -> PlayerResult {
         use CellState::*;
         use PlayerResult::*;
         // Check columns
@@ -149,7 +149,7 @@ impl Game {
         let cell = self.get_cell_state(2, 0);
         if (cell != Empty)
             && (cell == self.get_cell_state(1, 1))
-            && (cell == self.get_cell_state(2, 0))
+            && (cell == self.get_cell_state(0, 2))
         {
             return if cell == X { Won } else { Lost };
         }
@@ -225,6 +225,10 @@ impl Game {
             Select => {
                 self.state = Menu;
                 self.menu_option = SinglePlayer;
+                self.board = [CellState::Empty; BOARD_SIZE];
+                self.num_of_empty_cells = BOARD_SIZE;
+                self.is_player_one = true;
+                self.cur_pos = Position { x: 0, y: 0 };
             }
             _ => {}
         }
@@ -242,6 +246,10 @@ impl Game {
 
     pub fn get_state(&mut self) -> GameState {
         self.state
+    }
+
+    pub fn show_result(&mut self) {
+        self.state = GameState::Result;
     }
 }
 
@@ -343,6 +351,19 @@ mod test {
             Empty, Empty, Empty, //
             Empty, Empty, Empty, //
             Empty, Empty, Empty, //
+        ];
+        assert_eq!(game.check_player_one_result(), PlayerResult::OnGoing);
+    }
+
+    #[test]
+    fn v_shape() {
+        use CellState::*;
+        let mut game = Game::new();
+        game.num_of_empty_cells = 4;
+        game.board = [
+            X, O, Empty, //
+            O, X, Empty, //
+            X, Empty, Empty, //
         ];
         assert_eq!(game.check_player_one_result(), PlayerResult::OnGoing);
     }

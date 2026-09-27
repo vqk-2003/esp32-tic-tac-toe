@@ -10,7 +10,7 @@ use embedded_graphics::{
     text::{Text, renderer::CharacterStyle},
 };
 
-use crate::logic::{BOARD_COL, Game, GameState, MenuOption};
+use crate::logic::{BOARD_COL, CellState, Game, GameState, MenuOption, PlayerResult};
 
 impl Drawable for Game {
     type Color = Rgb565;
@@ -78,16 +78,61 @@ impl Drawable for Game {
                     )
                     .into_styled(cell_style)
                     .draw(target)?;
+
+                    match cell.1 {
+                        CellState::X => {
+                            Text::new(
+                                "X",
+                                Point {
+                                    x: (X_OFFSET + 13 + SQUARE_SIZE * (cell.0 / BOARD_COL)) as i32,
+                                    y: (Y_OFFSET + 23 + SQUARE_SIZE * (cell.0 % BOARD_COL)) as i32,
+                                },
+                                MonoTextStyle::new(&FONT_10X20, Rgb565::RED),
+                            )
+                            .draw(target)?;
+                        }
+                        CellState::O => {
+                            Text::new(
+                                "0",
+                                Point {
+                                    x: (X_OFFSET + 13 + SQUARE_SIZE * (cell.0 / BOARD_COL)) as i32,
+                                    y: (Y_OFFSET + 23 + SQUARE_SIZE * (cell.0 % BOARD_COL)) as i32,
+                                },
+                                MonoTextStyle::new(&FONT_10X20, Rgb565::BLUE),
+                            )
+                            .draw(target)?;
+                        }
+                        CellState::Empty => {}
+                    }
                 }
             }
-            Result => {
-                Text::new(
-                    "Game Over",
-                    Point { x: 40, y: 50 },
-                    MonoTextStyle::new(&FONT_10X20, Rgb565::GREEN),
-                )
-                .draw(target)?;
-            }
+            Result => match self.check_player_one_result() {
+                PlayerResult::Won => {
+                    Text::new(
+                        "Player 1 Won",
+                        Point { x: 20, y: 70 },
+                        MonoTextStyle::new(&FONT_10X20, Rgb565::RED),
+                    )
+                    .draw(target)?;
+                }
+                PlayerResult::Lost => {
+                    Text::new(
+                        "Player 2 Won",
+                        Point { x: 20, y: 70 },
+                        MonoTextStyle::new(&FONT_10X20, Rgb565::BLUE),
+                    )
+                    .draw(target)?;
+                }
+                PlayerResult::Drew => {
+                    Text::new(
+                        "Drawn",
+                        Point { x: 55, y: 70 },
+                        MonoTextStyle::new(&FONT_10X20, Rgb565::WHITE),
+                    )
+                    .draw(target)?;
+                }
+                PlayerResult::OnGoing => panic!("Cannot display on going!"),
+            },
         }
         Ok(())
     }
