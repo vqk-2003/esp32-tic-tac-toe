@@ -1,16 +1,16 @@
 use embedded_graphics::{
     Drawable,
-    geometry::Point,
+    geometry::{Point, Size},
     mono_font::{
         MonoTextStyle,
-        ascii::{FONT_5X8, FONT_9X15, FONT_10X20},
+        ascii::{FONT_9X15, FONT_10X20},
     },
-    pixelcolor::{Rgb565, RgbColor, WebColors},
-    primitives::{Line, Primitive, PrimitiveStyle, Rectangle},
+    pixelcolor::{Rgb565, RgbColor},
+    primitives::{Primitive, PrimitiveStyle, Rectangle},
     text::{Text, renderer::CharacterStyle},
 };
 
-use crate::logic::{Game, GameState, MenuOption};
+use crate::logic::{BOARD_COL, Game, GameState, MenuOption};
 
 impl Drawable for Game {
     type Color = Rgb565;
@@ -54,59 +54,31 @@ impl Drawable for Game {
                     .draw(target)?;
             }
             GamePlay => {
-                const X_OFFSET: i32 = (160 - 120) / 2;
-                const Y_OFFSET: i32 = (128 - 120) / 2;
-                Line::new(
-                    Point {
-                        x: 40 + X_OFFSET,
-                        y: 0 + Y_OFFSET,
-                    },
-                    Point {
-                        x: 40 + X_OFFSET,
-                        y: 120 + Y_OFFSET,
-                    },
-                )
-                .into_styled(PrimitiveStyle::with_stroke(Self::Color::WHITE, 2))
-                .draw(target)?;
+                const X_OFFSET: usize = 30;
+                const Y_OFFSET: usize = 10;
+                const SQUARE_SIZE: usize = 35;
 
-                Line::new(
-                    Point {
-                        x: 80 + X_OFFSET,
-                        y: 0 + Y_OFFSET,
-                    },
-                    Point {
-                        x: 80 + X_OFFSET,
-                        y: 120 + Y_OFFSET,
-                    },
-                )
-                .into_styled(PrimitiveStyle::with_stroke(Self::Color::WHITE, 2))
-                .draw(target)?;
+                for cell in self.board.iter().enumerate() {
+                    let mut cell_style = PrimitiveStyle::with_stroke(Rgb565::WHITE, 1);
 
-                Line::new(
-                    Point {
-                        x: 0 + X_OFFSET,
-                        y: 40 + Y_OFFSET,
-                    },
-                    Point {
-                        x: 120 + X_OFFSET,
-                        y: 40 + Y_OFFSET,
-                    },
-                )
-                .into_styled(PrimitiveStyle::with_stroke(Self::Color::WHITE, 2))
-                .draw(target)?;
-
-                Line::new(
-                    Point {
-                        x: 0 + X_OFFSET,
-                        y: 80 + Y_OFFSET,
-                    },
-                    Point {
-                        x: 120 + X_OFFSET,
-                        y: 80 + Y_OFFSET,
-                    },
-                )
-                .into_styled(PrimitiveStyle::with_stroke(Self::Color::WHITE, 2))
-                .draw(target)?;
+                    if cell.0 == (self.cur_pos.x * BOARD_COL + self.cur_pos.y) {
+                        cell_style.fill_color = Some(Rgb565::GREEN);
+                    } else {
+                        cell_style.fill_color = Some(Rgb565::BLACK);
+                    }
+                    Rectangle::new(
+                        Point {
+                            x: (X_OFFSET + SQUARE_SIZE * (cell.0 / BOARD_COL)) as i32,
+                            y: (Y_OFFSET + SQUARE_SIZE * (cell.0 % BOARD_COL)) as i32,
+                        },
+                        Size {
+                            width: SQUARE_SIZE as u32,
+                            height: SQUARE_SIZE as u32,
+                        },
+                    )
+                    .into_styled(cell_style)
+                    .draw(target)?;
+                }
             }
             Result => {
                 Text::new(

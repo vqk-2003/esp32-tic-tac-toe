@@ -1,13 +1,13 @@
-const BOARD_COL: usize = 3;
-const BOARD_ROW: usize = 3;
-const BOARD_SIZE: usize = BOARD_COL * BOARD_ROW;
+pub(crate) const BOARD_COL: usize = 3;
+pub(crate) const BOARD_ROW: usize = 3;
+pub(crate) const BOARD_SIZE: usize = BOARD_COL * BOARD_ROW;
 
 pub struct Game {
     pub(crate) state: GameState,
-    board: [CellState; BOARD_SIZE],
+    pub(crate) board: [CellState; BOARD_SIZE],
     num_of_empty_cells: usize,
     is_player_one: bool,
-    cur_pos: Position,
+    pub(crate) cur_pos: Position,
     pub(crate) menu_option: MenuOption,
 }
 
@@ -19,16 +19,16 @@ pub enum GameState {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum CellState {
+pub(crate) enum CellState {
     X,
     O,
     Empty,
 }
 
 #[derive(Clone, Copy)]
-struct Position {
-    x: usize,
-    y: usize,
+pub(crate) struct Position {
+    pub(crate) x: usize,
+    pub(crate) y: usize,
 }
 
 pub enum Direction {

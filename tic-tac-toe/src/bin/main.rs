@@ -21,7 +21,7 @@ use esp_hal::clock::CpuClock;
 use esp_hal::gpio::{Input, InputConfig, Io, Pull};
 use esp_hal::{delay, gpio, main, spi, time};
 use esp_println as _;
-use game::logic::{Cmd, Game, GameState, PlayerResult};
+use game::logic::{Cmd, Game, GameState};
 use st7735_lcd::{Orientation, ST7735};
 
 // This creates a default app-descriptor required by the esp-idf bootloader.
@@ -110,8 +110,8 @@ fn main() -> ! {
     loop {
         use game::logic::Direction;
 
-        const LOW_LIMIT: u16 = 500;
-        const HI_LIMIT: u16 = 2500;
+        const LOW_LIMIT: u16 = 200;
+        const HI_LIMIT: u16 = 2800;
 
         let mut select = None;
         critical_section::with(|cs| {
@@ -119,9 +119,11 @@ fn main() -> ! {
                 select = Some(Cmd::Select);
                 delay.delay_millis(200);
 
-                let mut sel_pin = SEL_PIN.borrow_ref_mut(cs).take().unwrap();
-                sel_pin.listen(gpio::Event::FallingEdge);
-                SEL_PIN.borrow_ref_mut(cs).replace(sel_pin);
+                SEL_PIN
+                    .borrow_ref_mut(cs)
+                    .as_mut()
+                    .unwrap()
+                    .listen(gpio::Event::FallingEdge);
 
                 IS_PIN_PRESS.borrow(cs).replace(false);
             }
@@ -146,8 +148,8 @@ fn main() -> ! {
         };
         if cur_x_axis_state != pre_x_axis_state {
             match cur_x_axis_state {
-                AxisState::Hi => game.handle_input(Cmd::Move(Direction::Right)),
-                AxisState::Low => game.handle_input(Cmd::Move(Direction::Left)),
+                AxisState::Hi => game.handle_input(Cmd::Move(Direction::Down)),
+                AxisState::Low => game.handle_input(Cmd::Move(Direction::Up)),
                 AxisState::Med => {}
             }
         };
@@ -163,8 +165,8 @@ fn main() -> ! {
         };
         if cur_y_axis_state != pre_y_axis_state {
             match cur_y_axis_state {
-                AxisState::Hi => game.handle_input(Cmd::Move(Direction::Up)),
-                AxisState::Low => game.handle_input(Cmd::Move(Direction::Down)),
+                AxisState::Hi => game.handle_input(Cmd::Move(Direction::Right)),
+                AxisState::Low => game.handle_input(Cmd::Move(Direction::Left)),
                 AxisState::Med => {}
             }
         }
